@@ -1,0 +1,248 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"regexp"
+	"strings"
+	"bufio"
+	"io"
+	"os"
+	"strconv"
+	"gopkg.in/jdkato/prose.v2"
+	"github.com/ynqa/wego/builder"
+	"github.com/ynqa/wego/model/word2vec"
+	"github.com/cipepser/goClustering/ward"
+	"github.com/cheggaaa/pb/v3"
+)
+
+func removeDateString(logStr string) string {
+	timeReg1 := regexp.MustCompile(`[0-9]{2,4}(-|\/)[0-9]{2}(-|\/)[0-9]{2}`)
+	timeReg2 := regexp.MustCompile(`[0-9]{2}:[0-9]{2}:[0-9]{2}`)
+	logStr = timeReg1.ReplaceAllString(logStr, "")
+	logStr = timeReg2.ReplaceAllString(logStr, "")
+	return removeSymbolString(logStr)
+}
+
+func removeSymbolString(logStr string) string {
+	symbolReg := regexp.MustCompile(`(,|-|;|:|<|>|\?|!|\(|\)|\+|=|\.|\[|\])`)
+	return symbolReg.ReplaceAllString(logStr, "")
+}
+
+func strListToFloatList(strList []string) (floatList []float64) {
+	for _, value := range strList {
+		if len(value) == 0 {
+			continue
+		}
+		floatValue, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			os.Exit(1)
+		}
+		floatList = append(floatList, floatValue)
+	}
+	return floatList
+}
+
+func readWordVector(filename string) map[string][]float64 {
+	result := make(map[string][]float64)
+	file, err := os.Open(filename)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer file.Close()
+
+	reader := bufio.NewReader(file)
+	for {
+		line, _,  err := reader.ReadLine()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Println(err)
+		}
+		splited := strings.Split(string(line), " ")
+		result[splited[0]] = strListToFloatList(splited[1:len(splited)])
+	}
+	return result
+}
+
+func pickupImportantWords(rawLogData string) (pickupedLogData string) {
+	rawLogData = removeDateString(rawLogData)
+	var pickup []string
+	doc, err := prose.NewDocument(rawLogData)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(1)
+	}
+	for _, tok := range doc.Tokens() {
+		if !strings.HasPrefix(tok.Tag, "CD") && !strings.HasPrefix(tok.Tag, "SYM") && !strings.HasPrefix(tok.Tag, "LS") {
+			pickup = append(pickup, tok.Text)
+		}
+	}
+	return strings.Join(pickup, " ")
+}
+
+func getLogLineCount(filename string) (count int) {
+	file, err := os.Open(filename)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	defer file.Close()
+
+	//reader := bufio.NewReader(file)
+	scanner := bufio.NewScanner(file)
+	count = 0
+	for scanner.Scan() {
+		count += 1
+	}
+	return count
+}
+
+func readLog(filename string) (logData []string) {
+	fmt.Printf("### Start read log & Morphological Analysis ###\n")
+	file, err := os.Open(filename)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	defer file.Close()
+
+	bar := pb.StartNew(getLogLineCount(filename))
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		logData = append(logData, pickupImportantWords(string(line)))
+		bar.Increment()
+	}
+	bar.Finish()
+	fmt.Printf("___ Finish read log & Morphological Analysis ___\n")
+	return logData
+}
+
+func calcVector(source, outputFile string) {
+	fmt.Printf("### Start word2vec Analysis ###\n")
+
+	b := builder.NewWord2vecBuilder()
+
+	b.Dimension(10).
+		Window(5).
+		Model(word2vec.CBOW).
+		Optimizer(word2vec.NEGATIVE_SAMPLING).
+		NegativeSampleSize(5)
+
+	m, err := b.Build()
+	if err != nil {
+		// Failed to build word2vec.
+	}
+	input := strings.NewReader(source)
+	err = m.Train(input)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	m.Save(outputFile)
+	fmt.Printf("___ Finish word2vec Analysis ___\n")
+}
+
+func getLogVector(logData string, wordVec map[string][]float64) []float64 {
+	// 1行のログに含まれる単語のベクトルを平均して1行のログの特徴ベクトルを返す
+	splittedLog := strings.Split(logData, " ")
+	wordCount := len(splittedLog)
+	dimention := 10
+	sumVector := make([]float64, dimention)
+	vector := make([]float64, dimention)
+	for _, word := range splittedLog {
+		vec := wordVec[word]
+		for i, _ := range(make([]int, dimention)) {
+			sumVector[i] += vec[i]
+		}
+	}
+	for i, _ := range(make([]int, dimention)) {
+		vector[i] = sumVector[i] / float64(wordCount)
+	}
+	return vector
+}
+
+func execClustering(matrix [][]float64) ward.Tree {
+	tree := ward.Ward(matrix)
+	return tree
+}
+
+func getChildNodes(parentNodeNo int, tree ward.Tree) (childs []int) {
+	left := tree[parentNodeNo].Left
+	right := tree[parentNodeNo].Right
+	//fmt.Printf(">>>>> Parent: %d, Left: %d, Right: %d\n", parentNodeNo, left, right)
+	if left != -1 {
+		childs = append(childs, getChildNodes(left, tree)...)
+	}
+	if right != -1 {
+		childs = append(childs, getChildNodes(right, tree)...)
+	}
+	if left == -1 && right == -1 {
+		childs = append(childs, parentNodeNo)
+	}
+	return childs
+}
+
+func includes(i int, list []int) bool {
+	for _, n := range list {
+		if i == n {
+			return true
+		}
+	}
+	return false
+}
+
+func getClusterRootNodesNo(tree ward.Tree, threshold float64) (roots []int) {
+	// treeの中からしきい値以上のdistanceのクラスタノードを抽出し、その中でも最下層のレイヤに該当するクラスタノードの番号一覧を取り出す。
+	var removedNodes []int
+	var parentNodes ward.Tree
+	for i, node := range tree {
+		if node.GetDist() < threshold {
+			removedNodes = append(removedNodes, i)
+		} else {
+			parentNodes = append(parentNodes, node)
+		}
+	}
+
+	for _, parent := range parentNodes {
+		if includes(parent.Left, removedNodes) {
+			roots = append(roots, parent.Left)
+		}
+		if includes(parent.Right, removedNodes) {
+			roots = append(roots, parent.Right)
+		}
+	}
+	return roots
+}
+
+
+
+func main() {
+	var logfile string
+	var threshold float64
+	flag.StringVar(&logfile, "logfile", "./test.log", "Analyze target log")
+	flag.Float64Var(&threshold, "threshold", 0.001, "Set cluster threshold")
+    flag.Parse()
+	logDataSlice := readLog(logfile)
+	logData := strings.Join(logDataSlice, "\n")
+	calcVector(logData, "./tmp.vector")
+	vectors := readWordVector("./tmp.vector")
+	matrix := make([][]float64, 0)
+	for _, logRow := range logDataSlice {
+		v := getLogVector(logRow, vectors)
+		matrix = append(matrix, v)
+	}
+	tree := execClustering(matrix)
+	roots := getClusterRootNodesNo(tree, threshold)
+	for i, r := range roots {
+		fmt.Printf(">>>>>>>>> cluster (%d) <<<<<<<<<<\n", i)
+		clusterMember := getChildNodes(r, tree)
+		for _, logno := range clusterMember {
+			fmt.Println(logDataSlice[logno])
+		}
+	}
+
+}
