@@ -1,7 +1,6 @@
-package main
+package logcluster
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"regexp"
@@ -17,6 +16,44 @@ import (
 	"github.com/cipepser/goClustering/ward"
 	"github.com/cheggaaa/pb/v3"
 )
+
+type LogClusterClient struct {
+	Filename string
+	Limit int
+	Threashold float64
+}
+
+type LogCluster struct {
+	MemberCount int
+	Logs []string
+}
+
+func New(filename string, limit int, threshold float64) LogCluster {
+	return LogClusterClient{filename, limit, threshold}
+}
+
+func (c *LogClusterClient) GetCluster() (clusters []LogCluster) {
+	logDataSlice := readLog(c.Filename, c.Limit)
+	logData := strings.Join(logDataSlice, "\n")
+	calcVector(logData, "./tmp.vector")
+	vectors := readWordVector("./tmp.vector")
+	matrix := make([][]float64, 0)
+	for _, logRow := range logDataSlice {
+		v := getLogVector(logRow, vectors)
+		matrix = append(matrix, v)
+	}
+	tree := execClustering(matrix)
+	roots := getClusterRootNodesNo(tree, threshold)
+	for i, r := range roots {
+		cluster := LogCluster{}
+		clusterMember := getChildNodes(r, tree)
+		cluster.MemberCount = len(clusterMember)
+		for _, logno := range clusterMember {
+			cluster.Logs = append(cluster.Logs, logDataSlice[logno])
+		}
+	}
+	return clusters
+}
 
 func removeDateString(logStr string) string {
 	timeReg1 := regexp.MustCompile(`[0-9]{2,4}(-|\/)[0-9]{2}(-|\/)[0-9]{2}`)
@@ -242,23 +279,5 @@ func main() {
 	flag.Float64Var(&threshold, "threshold", 0.001, "Set cluster threshold")
 	flag.IntVar(&limit, "limit", 5, "Set pararell size limit")
 	flag.Parse()
-	logDataSlice := readLog(logfile, limit)
-	logData := strings.Join(logDataSlice, "\n")
-	calcVector(logData, "./tmp.vector")
-	vectors := readWordVector("./tmp.vector")
-	matrix := make([][]float64, 0)
-	for _, logRow := range logDataSlice {
-		v := getLogVector(logRow, vectors)
-		matrix = append(matrix, v)
-	}
-	tree := execClustering(matrix)
-	roots := getClusterRootNodesNo(tree, threshold)
-	for i, r := range roots {
-		fmt.Printf(">>>>>>>>> cluster (%d) <<<<<<<<<<\n", i)
-		clusterMember := getChildNodes(r, tree)
-		for _, logno := range clusterMember {
-			fmt.Println(logDataSlice[logno])
-		}
-	}
 
 }
