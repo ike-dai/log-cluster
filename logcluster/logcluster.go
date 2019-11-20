@@ -35,8 +35,7 @@ func New(filename string, limit int, threshold float64) LogClusterClient {
 func (c *LogClusterClient) GetCluster() (clusters []LogCluster) {
 	logDataSlice := readLog(c.Filename, c.Limit)
 	logData := strings.Join(logDataSlice, "\n")
-	calcVector(logData, "./tmp.vector")
-	vectors := readWordVector("./tmp.vector")
+	vectors := calcVector(logData)
 	matrix := make([][]float64, 0)
 	for _, logRow := range logDataSlice {
 		v := getLogVector(logRow, vectors)
@@ -83,28 +82,6 @@ func strListToFloatList(strList []string) (floatList []float64) {
 	return floatList
 }
 
-func readWordVector(filename string) map[string][]float64 {
-	result := make(map[string][]float64)
-	file, err := os.Open(filename)
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer file.Close()
-
-	reader := bufio.NewReader(file)
-	for {
-		line, _,  err := reader.ReadLine()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			fmt.Println(err)
-		}
-		splited := strings.Split(string(line), " ")
-		result[splited[0]] = strListToFloatList(splited[1:len(splited)])
-	}
-	return result
-}
 
 func pickupImportantWords(rawLogData string) (pickupedLogData string) {
 	rawLogData = removeDateString(rawLogData)
@@ -173,7 +150,7 @@ func readLog(filename string, limit int) (logData []string) {
 	return logData
 }
 
-func calcVector(source, outputFile string) {
+func calcVector(source string) map[string][]float64 {
 	fmt.Printf("### Start word2vec Analysis ###\n")
 
 	b := builder.NewWord2vecBuilder()
@@ -194,8 +171,13 @@ func calcVector(source, outputFile string) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	m.Save(outputFile)
+	wordVector, err := m.Get()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 	fmt.Printf("___ Finish word2vec Analysis ___\n")
+	return wordVector
 }
 
 func getLogVector(logData string, wordVec map[string][]float64) []float64 {
