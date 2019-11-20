@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"sync"
 	"gopkg.in/jdkato/prose.v2"
 	"github.com/ynqa/wego/builder"
 	"github.com/ynqa/wego/model/word2vec"
@@ -100,7 +101,7 @@ func getLogLineCount(filename string) (count int) {
 	return count
 }
 
-func readLog(filename string) (logData []string) {
+func readLog(filename string, limit int) (logData []string) {
 	fmt.Printf("### Start read log & Morphological Analysis ###\n")
 	file, err := os.Open(filename)
 	if err != nil {
@@ -109,13 +110,26 @@ func readLog(filename string) (logData []string) {
 	}
 	defer file.Close()
 
-	bar := pb.StartNew(getLogLineCount(filename))
+	lineCount := getLogLineCount(filename)
+	bar := pb.StartNew(lineCount)
+	// ch := make(chan string, lineCount)
 	scanner := bufio.NewScanner(file)
+	wg := new(sync.WaitGroup) //並行処理のため、WaitGroupを使ってloopを待つように。
+	semaphore := make(chan struct{}, limit) //同時並行処理件数の制御用セマフォ
 	for scanner.Scan() {
+		wg.Add(1) //goroutineに入る前にインクリメントしてgoroutineが終わればデクリメントされるように。最終的に全部が終わった時点で処理が抜けるようにする。
+		semaphore <- struct{}{}
 		line := scanner.Text()
-		logData = append(logData, pickupImportantWords(string(line)))
-		bar.Increment()
+		go func() {
+			defer func() {
+				wg.Done()
+				<-semaphore
+			}()
+			logData = append(logData, pickupImportantWords(string(line)))
+			bar.Increment()
+		}()
 	}
+	wg.Wait()
 	bar.Finish()
 	fmt.Printf("___ Finish read log & Morphological Analysis ___\n")
 	return logData
@@ -223,10 +237,12 @@ func getClusterRootNodesNo(tree ward.Tree, threshold float64) (roots []int) {
 func main() {
 	var logfile string
 	var threshold float64
+	var limit int
 	flag.StringVar(&logfile, "logfile", "./test.log", "Analyze target log")
 	flag.Float64Var(&threshold, "threshold", 0.001, "Set cluster threshold")
-    flag.Parse()
-	logDataSlice := readLog(logfile)
+	flag.IntVar(&limit, "limit", 5, "Set pararell size limit")
+	flag.Parse()
+	logDataSlice := readLog(logfile, limit)
 	logData := strings.Join(logDataSlice, "\n")
 	calcVector(logData, "./tmp.vector")
 	vectors := readWordVector("./tmp.vector")
