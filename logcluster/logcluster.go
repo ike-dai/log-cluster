@@ -20,7 +20,7 @@ import (
 type LogClusterClient struct {
 	Filename string
 	Limit int
-	Threashold float64
+	Threshold float64
 }
 
 type LogCluster struct {
@@ -28,7 +28,7 @@ type LogCluster struct {
 	Logs []string
 }
 
-func New(filename string, limit int, threshold float64) LogCluster {
+func New(filename string, limit int, threshold float64) LogClusterClient {
 	return LogClusterClient{filename, limit, threshold}
 }
 
@@ -43,7 +43,7 @@ func (c *LogClusterClient) GetCluster() (clusters []LogCluster) {
 		matrix = append(matrix, v)
 	}
 	tree := execClustering(matrix)
-	roots := getClusterRootNodesNo(tree, threshold)
+	roots := getClusterRootNodesNo(tree, c.Threshold)
 	for i, r := range roots {
 		cluster := LogCluster{}
 		clusterMember := getChildNodes(r, tree)
@@ -269,15 +269,3 @@ func getClusterRootNodesNo(tree ward.Tree, threshold float64) (roots []int) {
 	return roots
 }
 
-
-
-func main() {
-	var logfile string
-	var threshold float64
-	var limit int
-	flag.StringVar(&logfile, "logfile", "./test.log", "Analyze target log")
-	flag.Float64Var(&threshold, "threshold", 0.001, "Set cluster threshold")
-	flag.IntVar(&limit, "limit", 5, "Set pararell size limit")
-	flag.Parse()
-
-}
