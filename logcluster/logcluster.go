@@ -44,13 +44,14 @@ func (c *LogClusterClient) GetCluster() (clusters []LogCluster) {
 	}
 	tree := execClustering(matrix)
 	roots := getClusterRootNodesNo(tree, c.Threshold)
-	for i, r := range roots {
+	for _, r := range roots {
 		cluster := LogCluster{}
 		clusterMember := getChildNodes(r, tree)
 		cluster.MemberCount = len(clusterMember)
 		for _, logno := range clusterMember {
 			cluster.Logs = append(cluster.Logs, logDataSlice[logno])
 		}
+		clusters = append(clusters, cluster)
 	}
 	return clusters
 }
