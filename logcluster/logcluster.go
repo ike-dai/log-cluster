@@ -23,8 +23,8 @@ type LogClusterClient struct {
 }
 
 type LogCluster struct {
-	MemberCount int
-	Logs []string
+	MemberCount int `json:"count"`
+	Logs []string `json:"log"`
 }
 
 func New(filename string, limit int, threshold float64) LogClusterClient {
