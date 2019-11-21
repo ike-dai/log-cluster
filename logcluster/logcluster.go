@@ -25,6 +25,8 @@ type LogClusterClient struct {
 type LogCluster struct {
 	MemberCount int `json:"count"`
 	Logs []string `json:"log"`
+	CauseComment string `json:"cause"`
+	ActionPlan string `json:"action"`
 }
 
 func New(filename string, limit int, threshold float64) LogClusterClient {
