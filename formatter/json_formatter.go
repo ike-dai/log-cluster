@@ -10,8 +10,8 @@ type JsonFormatter struct {
 	Clusters []logcluster.LogCluster `json:"clusters"`
 }
 
-func NewJsonFormatter(clusters []logcluster.LogCluster) {
-	f.Clusters = clusters
+func NewJsonFormatter(clusters []logcluster.LogCluster) JsonFormatter {
+	return JsonFormatter{clusters}
 }
 
 func (f *JsonFormatter)Output() {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"github.com/ike-dai/log-cluster/logcluster"
 	"github.com/ike-dai/log-cluster/formatter"
 )
@@ -20,11 +19,13 @@ func main() {
 	client := logcluster.New(logfile, limit, threshold)
 	clusters := client.GetCluster()
 	if output == "table" {
-		output.NewTableFormatter(clusters)
+		f := formatter.NewTableFormatter(clusters)
+		f.Output()
+
 	}
 	if output == "json" {
-		output.NewJsonFormatter(clusters)
+		f := formatter.NewJsonFormatter(clusters)
+		f.Output()
 	}
-	output.Output()
 	//fmt.Println(clusters)
 }

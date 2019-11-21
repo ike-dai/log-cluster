@@ -11,13 +11,14 @@ type TableFormatter struct {
 	TableData [][]string
 }
 
-func NewTableFormatter(clusters []logcluster.LogCluster) {
+func NewTableFormatter(clusters []logcluster.LogCluster) TableFormatter {
+	f := TableFormatter{}
 	for i, cluster := range clusters {
 		for _, log := range cluster.Logs {
 			f.TableData = append(f.TableData, []string{strconv.Itoa(i), log})
 		}
 	}
-	return nil
+	return f
 }
 
 func (f *TableFormatter)Output() {
