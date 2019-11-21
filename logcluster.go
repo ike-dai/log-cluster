@@ -3,44 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
-	"strconv"
-	"encoding/json"
 	"github.com/ike-dai/log-cluster/logcluster"
-	"github.com/olekukonko/tablewriter"
+	"github.com/ike-dai/log-cluster/formatter"
 )
-
-func getTableData(clusters []logcluster.LogCluster) (tableData [][]string){
-	for i, cluster := range clusters {
-		for _, log := range cluster.Logs {
-			tableData = append(tableData, []string{strconv.Itoa(i), log})
-		}
-	}
-	fmt.Println(tableData)
-	return tableData
-}
-
-func outputTableData(clusters []logcluster.LogCluster) {
-	tableData := getTableData(clusters)
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"no.", "log data"})
-	table.SetAutoMergeCells(true)
-	table.SetRowLine(true)
-	table.AppendBulk(tableData)
-	table.Render()
-}
-
-
-type JsonOutput struct {
-	Clusters []logcluster.LogCluster `json:"clusters"`
-}
-
-func outputJsonData(clusters []logcluster.LogCluster) {
-	output := JsonOutput{clusters}
-	bytes, _ := json.Marshal(output)
-	fmt.Println(string(bytes))
-}
-
 
 func main() {
 	var logfile string
@@ -55,10 +20,11 @@ func main() {
 	client := logcluster.New(logfile, limit, threshold)
 	clusters := client.GetCluster()
 	if output == "table" {
-		outputTableData(clusters)
+		output.NewTableFormatter(clusters)
 	}
 	if output == "json" {
-		outputJsonData(clusters)
+		output.NewJsonFormatter(clusters)
 	}
+	output.Output()
 	//fmt.Println(clusters)
 }
