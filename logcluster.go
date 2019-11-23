@@ -7,7 +7,19 @@ import (
 	"bufio"
 	"github.com/ike-dai/log-cluster/logcluster"
 	"github.com/ike-dai/log-cluster/formatter"
+	"github.com/olekukonko/tablewriter"
 )
+
+func viewLog(logs []string) {
+	var viewData [][]string
+	for _, log := range logs {
+		viewData = append(viewData, []string{log})
+	}
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetRowLine(true)
+	table.AppendBulk(viewData)
+	table.Render()
+}
 
 func main() {
 	var logfile string
@@ -23,11 +35,14 @@ func main() {
 	flag.Parse()
 	client := logcluster.New(logfile, limit, threshold)
 	clusters := client.GetCluster()
+	outputData := clusters
 	if interactive {
+		fmt.Printf("Clustered to [ %d ] log clusters. Please set cause and action \n", len(clusters))
 		for _, cluster := range clusters {
-			fmt.Printf("Log cluster:\n%v", cluster.Logs)
-			fmt.Printf("Please input the cause of these LOGs\n")
-			fmt.Printf("(Send by entering empty line)>>>")
+			fmt.Println("Log cluster:")
+			viewLog(cluster.Logs)
+			fmt.Printf("Please input the 'CAUSE' of these logs\n")
+			fmt.Printf("(Send by entering a empty line) >>> ")
 			stdin := bufio.NewScanner(os.Stdin)
 			var causeText string
 			for stdin.Scan(){
@@ -39,8 +54,8 @@ func main() {
 				}
 			}
 			cluster.CauseComment = causeText
-			fmt.Printf("Please input the action for  these LOGs\n")
-			fmt.Printf("(Send by entering empty line)>>>")
+			fmt.Printf("Please input the 'ACTION' for these logs\n")
+			fmt.Printf("(Send by entering a empty line) >>> ")
 			var actionText string
 			for stdin.Scan(){
 				line := stdin.Text()
@@ -51,16 +66,16 @@ func main() {
 				}
 			}
 			cluster.ActionPlan = actionText
+			outputData = append(outputData, cluster)
 		}
 	}
 	if output == "table" {
-		f := formatter.NewTableFormatter(clusters)
+		f := formatter.NewTableFormatter(outputData)
 		f.Output()
 
 	}
 	if output == "json" {
-		f := formatter.NewJsonFormatter(clusters)
+		f := formatter.NewJsonFormatter(outputData)
 		f.Output()
 	}
-	//fmt.Println(clusters)
 }
