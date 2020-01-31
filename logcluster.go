@@ -5,6 +5,7 @@ import (
 	"os"
 	"fmt"
 	"bufio"
+	"io/ioutil"
 	"github.com/ike-dai/log-cluster/logcluster"
 	"github.com/ike-dai/log-cluster/formatter"
 	"github.com/olekukonko/tablewriter"
@@ -33,7 +34,12 @@ func main() {
 	flag.StringVar(&output, "output", "table", "Set output type (table/json)")
 	flag.BoolVar(&interactive, "interactive", false, "Select interactive mode. (true/false)")
 	flag.Parse()
-	client := logcluster.New(logfile, limit, threshold)
+	logData, err := ioutil.ReadFile(logfile)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	client := logcluster.New(logData, limit, threshold)
 	clusters := client.GetCluster()
 	outputData := clusters
 	if interactive {

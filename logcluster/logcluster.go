@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"bytes"
 	"gopkg.in/jdkato/prose.v2"
 	"github.com/ike-dai/wego/builder"
 	"github.com/ike-dai/wego/model/word2vec"
@@ -17,7 +18,7 @@ import (
 )
 
 type LogClusterClient struct {
-	Filename string
+	FileData []byte
 	Limit int
 	Threshold float64
 }
@@ -29,12 +30,12 @@ type LogCluster struct {
 	ActionPlan string `json:"action"`
 }
 
-func New(filename string, limit int, threshold float64) LogClusterClient {
-	return LogClusterClient{filename, limit, threshold}
+func New(fileData []byte, limit int, threshold float64) LogClusterClient {
+	return LogClusterClient{fileData, limit, threshold}
 }
 
 func (c *LogClusterClient) GetCluster() (clusters []LogCluster) {
-	logDataSlice := readLog(c.Filename, c.Limit)
+	logDataSlice := readLog(c.FileData, c.Limit)
 	logData := strings.Join(logDataSlice, "\n")
 	vectors := calcVector(logData)
 	matrix := make([][]float64, 0)
@@ -100,16 +101,8 @@ func pickupImportantWords(rawLogData string) (pickupedLogData string) {
 	return strings.Join(pickup, " ")
 }
 
-func getLogLineCount(filename string) (count int) {
-	file, err := os.Open(filename)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	defer file.Close()
-
-	//reader := bufio.NewReader(file)
-	scanner := bufio.NewScanner(file)
+func getLogLineCount(fileData []byte) (count int) {
+	scanner := bufio.NewScanner(bytes.NewReader(fileData))
 	count = 0
 	for scanner.Scan() {
 		count += 1
@@ -117,19 +110,13 @@ func getLogLineCount(filename string) (count int) {
 	return count
 }
 
-func readLog(filename string, limit int) (logData []string) {
+func readLog(fileData []byte, limit int) (logData []string) {
 	fmt.Printf("### Start read log & Morphological Analysis ###\n")
-	file, err := os.Open(filename)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	defer file.Close()
 
-	lineCount := getLogLineCount(filename)
+	lineCount := getLogLineCount(fileData)
 	bar := pb.StartNew(lineCount)
 	// ch := make(chan string, lineCount)
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(bytes.NewReader(fileData))
 	wg := new(sync.WaitGroup) //並行処理のため、WaitGroupを使ってloopを待つように。
 	semaphore := make(chan struct{}, limit) //同時並行処理件数の制御用セマフォ
 	for scanner.Scan() {
