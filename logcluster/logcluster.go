@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"bufio"
-	"os"
 	"strconv"
 	"sync"
 	"bytes"
@@ -38,6 +37,9 @@ func (c *LogClusterClient) GetCluster() (clusters []LogCluster) {
 	logDataSlice := readLog(c.FileData, c.Limit)
 	logData := strings.Join(logDataSlice, "\n")
 	vectors := calcVector(logData)
+	if len(vectors) == 0 {
+		return clusters
+	}
 	matrix := make([][]float64, 0)
 	for _, logRow := range logDataSlice {
 		v := getLogVector(logRow, vectors)
@@ -77,7 +79,8 @@ func strListToFloatList(strList []string) (floatList []float64) {
 		}
 		floatValue, err := strconv.ParseFloat(value, 64)
 		if err != nil {
-			os.Exit(1)
+			fmt.Printf("ParseFloat error: %v\n", err)
+			return floatList
 		}
 		floatList = append(floatList, floatValue)
 	}
@@ -91,7 +94,7 @@ func pickupImportantWords(rawLogData string) (pickupedLogData string) {
 	doc, err := prose.NewDocument(rawLogData)
 	if err != nil {
 		log.Fatal(err)
-		os.Exit(1)
+		return pickupedLogData
 	}
 	for _, tok := range doc.Tokens() {
 		if !strings.HasPrefix(tok.Tag, "CD") && !strings.HasPrefix(tok.Tag, "SYM") && !strings.HasPrefix(tok.Tag, "LS") {
@@ -138,7 +141,7 @@ func readLog(fileData []byte, limit int) (logData []string) {
 	return logData
 }
 
-func calcVector(source string) map[string][]float64 {
+func calcVector(source string) (wordVector map[string][]float64) {
 	fmt.Printf("### Start word2vec Analysis ###\n")
 
 	b := builder.NewWord2vecBuilder()
@@ -157,12 +160,12 @@ func calcVector(source string) map[string][]float64 {
 	err = m.Train(input)
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		return wordVector
 	}
-	wordVector, err := m.Get()
+	wordVector, err = m.Get()
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		return wordVector
 	}
 	fmt.Printf("___ Finish word2vec Analysis ___\n")
 	return wordVector
@@ -177,6 +180,9 @@ func getLogVector(logData string, wordVec map[string][]float64) []float64 {
 	vector := make([]float64, dimention)
 	for _, word := range splittedLog {
 		vec := wordVec[word]
+		if len(vec) == 0 {
+			return vector
+		}
 		for i, _ := range(make([]int, dimention)) {
 			sumVector[i] += vec[i]
 		}
