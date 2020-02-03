@@ -131,7 +131,10 @@ func readLog(fileData []byte, limit int) (logData []string) {
 				wg.Done()
 				<-semaphore
 			}()
-			logData = append(logData, pickupImportantWords(string(line)))
+			importantWords := pickupImportantWords(string(line))
+			if len(importantWords) > 0 {
+				logData = append(logData, importantWords)
+			}
 			bar.Increment()
 		}()
 	}
